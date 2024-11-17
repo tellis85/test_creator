@@ -7,12 +7,19 @@ import html2canvas from 'html2canvas';
 
 interface LabelItem {
   Brand: string;
-  Collection: string;
-  "Product Series": string;
-  "Background template": string;
-  "Color Name": string;
-  "Color Number": string;
-  Finish: string | null;
+  seriesname: string;
+  colorcode: string;
+  "Background Template": string;
+  finish: string;
+  colorname: string;
+  "Color Code + Color Name": string;
+  nominalsize_1: string;
+  nominalsize_2: string;
+  nominalsize_3: string;
+}
+
+interface SizeSelection {
+  [key: string]: boolean;
 }
 
 export const LabelGenerator = () => {
@@ -21,17 +28,16 @@ export const LabelGenerator = () => {
   const [error, setError] = useState<string | null>(null);
 
   const [selectedBrand, setSelectedBrand] = useState('');
-  const [selectedCollection, setSelectedCollection] = useState('');
   const [selectedSeries, setSelectedSeries] = useState('');
-  const [selectedColorName, setSelectedColorName] = useState('');
-  const [selectedColorNumber, setSelectedColorNumber] = useState('');
+  const [selectedColorCode, setSelectedColorCode] = useState('');
   const [selectedFinish, setSelectedFinish] = useState('');
+  const [selectedSizes, setSelectedSizes] = useState<SizeSelection>({});
   const [showPrintLayout, setShowPrintLayout] = useState(false);
 
   useEffect(() => {
     const loadCSV = async () => {
       try {
-        const response = await fetch('/data/labelData.csv');
+        const response = await fetch('/data/Reformatted_Data.csv');
         const csvText = await response.text();
         const lines = csvText.split('\n');
         const parsedData = lines
@@ -41,12 +47,15 @@ export const LabelGenerator = () => {
             const values = line.split(',').map(value => value.trim());
             return {
               Brand: values[0] || '',
-              Collection: values[1] || '',
-              "Product Series": values[2] || '',
-              "Background template": values[3] || '',
-              "Color Name": values[4] || '',
-              "Color Number": values[5] || '',
-              Finish: values[6] || null
+              seriesname: values[1] || '',
+              colorcode: values[2] || '',
+              "Background Template": values[3] || '',
+              finish: values[4] || '',
+              colorname: values[5] || '',
+              "Color Code + Color Name": values[6] || '',
+              nominalsize_1: values[7] || '',
+              nominalsize_2: values[8] || '',
+              nominalsize_3: values[9] || ''
             } as LabelItem;
           });
 
@@ -62,37 +71,44 @@ export const LabelGenerator = () => {
     loadCSV();
   }, []);
 
+  useEffect(() => {
+    setSelectedSizes({});
+  }, [selectedSeries]);
+
   const getTemplatePath = (templateName: string) => {
     if (!templateName) return null;
     const cleanName = templateName.trim();
     return `/templates/daltile/${cleanName}`;
   };
 
-  const Label = ({ scale = 1, rotated = false }) => {
+  const Label = ({ scale = 1 }) => {
     const selectedData = labelData.find(item => 
       item.Brand === selectedBrand &&
-      (selectedCollection === '' || item.Collection === selectedCollection) &&
-      item['Product Series'] === selectedSeries &&
-      (!selectedColorName || item['Color Name'] === selectedColorName) &&
-      (!selectedColorNumber || item['Color Number'] === selectedColorNumber)
+      item.seriesname === selectedSeries &&
+      (item.colorcode === selectedColorCode || !selectedColorCode)
     );
 
-    const templatePath = selectedData ? getTemplatePath(selectedData['Background template']) : null;
+    const templatePath = selectedData ? getTemplatePath(selectedData['Background Template']) : null;
     
     const baseWidth = 2 * 96;  // 2 inches at 96 DPI
     const baseHeight = 3 * 96; // 3 inches at 96 DPI
 
-    const textContainerStyle = {
-      position: 'absolute' as const,
-      bottom: '0.5in',
-      left: 0,
-      right: 0,
-      display: 'flex',
-      flexDirection: 'column' as const,
-      alignItems: 'center',
-      justifyContent: 'center',
-      textAlign: 'center' as const,
-    };
+    const selectedSizesText = Object.entries(selectedSizes)
+      .filter(([_, isSelected]) => isSelected)
+      .map(([size]) => size)
+      .join(', ');
+
+      const textContainerStyle = {
+        position: 'absolute' as const,
+        top: 'calc(2in + 0.25in)', // Added another 0.125in to make it 0.25in total
+        left: 0,
+        right: 0,
+        display: 'flex',
+        flexDirection: 'column' as const,
+        alignItems: 'center',
+        justifyContent: 'flex-start',
+        textAlign: 'center' as const,
+      };
 
     const textStyle = {
       fontFamily: 'Geometria, Arial, sans-serif',
@@ -126,21 +142,27 @@ export const LabelGenerator = () => {
         )}
         
         <div style={textContainerStyle}>
-          <div style={textStyle}>
-            {selectedColorName}
-            {selectedColorName && selectedColorNumber && " "}
-            {selectedColorNumber}
-          </div>
-          {selectedFinish && selectedFinish !== "NULL" && (
-            <div style={textStyle}>
-              {selectedFinish}
-            </div>
+          {selectedData && selectedColorCode && (
+            <>
+              <div style={textStyle}>
+                {selectedData['Color Code + Color Name']}
+              </div>
+              {selectedFinish && (
+                <div style={textStyle}>
+                  {selectedFinish}
+                </div>
+              )}
+              {selectedSizesText && (
+                <div style={textStyle}>
+                  {selectedSizesText}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
     );
   };
-
   const PrintLayout = () => {
     return (
       <div 
@@ -183,58 +205,60 @@ export const LabelGenerator = () => {
       </div>
     );
   };
+
   const brands = useMemo(() => [...new Set(labelData.map(item => item.Brand))], [labelData]);
   
-  const collections = useMemo(() => {
-    if (!selectedBrand) return [];
-    return ['', ...new Set(labelData
-      .filter(item => item.Brand === selectedBrand)
-      .map(item => item.Collection))]
-      .filter(collection => collection !== null);
-  }, [selectedBrand, labelData]);
-
   const series = useMemo(() => {
     if (!selectedBrand) return [];
     return [...new Set(labelData
-      .filter(item => 
-        item.Brand === selectedBrand && 
-        (selectedCollection === '' || item.Collection === selectedCollection))
-      .map(item => item['Product Series']))];
-  }, [selectedBrand, selectedCollection, labelData]);
+      .filter(item => item.Brand === selectedBrand)
+      .map(item => item.seriesname))];
+  }, [selectedBrand, labelData]);
 
-  const colorNames = useMemo(() => {
+  const colorCodes = useMemo(() => {
     if (!selectedSeries) return [];
     return [...new Set(labelData
       .filter(item => 
         item.Brand === selectedBrand && 
-        (selectedCollection === '' || item.Collection === selectedCollection) && 
-        item['Product Series'] === selectedSeries)
-      .map(item => item['Color Name']))];
-  }, [selectedBrand, selectedCollection, selectedSeries, labelData]);
-
-  const colorNumbers = useMemo(() => {
-    if (!selectedSeries) return [];
-    const filtered = labelData.filter(item => 
-      item.Brand === selectedBrand && 
-      (selectedCollection === '' || item.Collection === selectedCollection) && 
-      item['Product Series'] === selectedSeries &&
-      (!selectedColorName || item['Color Name'] === selectedColorName)
-    );
-    return [...new Set(filtered.map(item => item['Color Number']))];
-  }, [selectedBrand, selectedCollection, selectedSeries, selectedColorName, labelData]);
+        item.seriesname === selectedSeries)
+      .map(item => ({
+        code: item.colorcode,
+        displayName: item['Color Code + Color Name']
+      })))];
+  }, [selectedBrand, selectedSeries, labelData]);
 
   const finishes = useMemo(() => {
     if (!selectedSeries) return [];
-    const filtered = labelData.filter(item => 
-      item.Brand === selectedBrand && 
-      (selectedCollection === '' || item.Collection === selectedCollection) && 
-      item['Product Series'] === selectedSeries &&
-      (!selectedColorName || item['Color Name'] === selectedColorName) &&
-      (!selectedColorNumber || item['Color Number'] === selectedColorNumber)
-    );
-    return [...new Set(filtered.map(item => item.Finish))]
+    return [...new Set(labelData
+      .filter(item => 
+        item.Brand === selectedBrand && 
+        item.seriesname === selectedSeries &&
+        item.colorcode === selectedColorCode
+      )
+      .map(item => item.finish))]
       .filter(finish => finish && finish !== "NULL");
-  }, [selectedBrand, selectedCollection, selectedSeries, selectedColorName, selectedColorNumber, labelData]);
+  }, [selectedBrand, selectedSeries, selectedColorCode, labelData]);
+
+  const availableSizes = useMemo(() => {
+    if (!selectedSeries) return [];
+    
+    const sizes = new Set<string>();
+    labelData
+      .filter(item => 
+        item.Brand === selectedBrand && 
+        item.seriesname === selectedSeries &&
+        item.colorcode === selectedColorCode
+      )
+      .forEach(item => {
+        ['nominalsize_1', 'nominalsize_2', 'nominalsize_3'].forEach(sizeKey => {
+          if (item[sizeKey as keyof LabelItem] && item[sizeKey as keyof LabelItem] !== '') {
+            sizes.add(item[sizeKey as keyof LabelItem]);
+          }
+        });
+      });
+    
+    return Array.from(sizes).sort();
+  }, [selectedBrand, selectedSeries, selectedColorCode, labelData]);
 
   const handleGeneratePDF = async () => {
     const printLayout = document.getElementById('print-layout');
@@ -293,11 +317,10 @@ export const LabelGenerator = () => {
               value={selectedBrand}
               onChange={(e) => {
                 setSelectedBrand(e.target.value);
-                setSelectedCollection('');
                 setSelectedSeries('');
-                setSelectedColorName('');
-                setSelectedColorNumber('');
+                setSelectedColorCode('');
                 setSelectedFinish('');
+                setSelectedSizes({});
               }}
             >
               <option value="">Select Brand</option>
@@ -308,38 +331,15 @@ export const LabelGenerator = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Collection</label>
-            <select 
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-              value={selectedCollection}
-              onChange={(e) => {
-                setSelectedCollection(e.target.value);
-                setSelectedSeries('');
-                setSelectedColorName('');
-                setSelectedColorNumber('');
-                setSelectedFinish('');
-              }}
-              disabled={!selectedBrand}
-            >
-              <option value="">All Collections</option>
-              {collections.map(collection => (
-                <option key={collection} value={collection}>
-                  {collection || '(No Collection)'}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Product Series</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Series</label>
             <select 
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
               value={selectedSeries}
               onChange={(e) => {
                 setSelectedSeries(e.target.value);
-                setSelectedColorName('');
-                setSelectedColorNumber('');
+                setSelectedColorCode('');
                 setSelectedFinish('');
+                setSelectedSizes({});
               }}
               disabled={!selectedBrand}
             >
@@ -351,42 +351,30 @@ export const LabelGenerator = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Color Name (Optional)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Color</label>
             <select 
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-              value={selectedColorName}
-              onChange={(e) => setSelectedColorName(e.target.value)}
+              value={selectedColorCode}
+              onChange={(e) => {
+                setSelectedColorCode(e.target.value);
+                setSelectedFinish('');
+              }}
               disabled={!selectedSeries}
             >
-              <option value="">Select Color Name</option>
-              {colorNames.map(name => (
-                <option key={name} value={name}>{name}</option>
+              <option value="">Select Color</option>
+              {colorCodes.map(({ code, displayName }) => (
+                <option key={code} value={code}>{displayName}</option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Color Number (Optional)</label>
-            <select 
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-              value={selectedColorNumber}
-              onChange={(e) => setSelectedColorNumber(e.target.value)}
-              disabled={!selectedSeries}
-            >
-              <option value="">Select Color Number</option>
-              {colorNumbers.map(number => (
-                <option key={number} value={number}>{number}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Finish (Optional)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Finish</label>
             <select 
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
               value={selectedFinish}
               onChange={(e) => setSelectedFinish(e.target.value)}
-              disabled={!selectedSeries || finishes.length === 0}
+              disabled={!selectedColorCode}
             >
               <option value="">Select Finish</option>
               {finishes.map(finish => (
@@ -394,6 +382,36 @@ export const LabelGenerator = () => {
               ))}
             </select>
           </div>
+
+          {availableSizes.length > 0 && (
+            <div className="mt-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Available Sizes</label>
+              <div className="space-y-2">
+                {availableSizes.map((size) => (
+                  <div key={size} className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id={`size-${size}`}
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      checked={selectedSizes[size] || false}
+                      onChange={(e) => {
+                        setSelectedSizes(prev => ({
+                          ...prev,
+                          [size]: e.target.checked
+                        }));
+                      }}
+                    />
+                    <label
+                      htmlFor={`size-${size}`}
+                      className="ml-2 text-sm text-gray-700"
+                    >
+                      {size}
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="border rounded-lg p-4 bg-white min-h-[384px] flex items-center justify-center">
@@ -427,6 +445,7 @@ export const LabelGenerator = () => {
         <button
           className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
           onClick={() => setShowPrintLayout(true)}
+          disabled={!selectedColorCode}
         >
           Preview Print Layout
         </button>
