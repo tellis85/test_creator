@@ -16,6 +16,22 @@ interface LabelItem {
   nominalsize_1: string;
   nominalsize_2: string;
   nominalsize_3: string;
+  nominalsize_4: string;
+  nominalsize_5: string;
+  nominalsize_6: string;
+  nominalsize_7: string;
+  nominalsize_8: string;
+  nominalsize_9: string;
+  nominalsize_10: string;
+}
+
+interface ColorData {
+  code: string;
+  displayName: string;
+  finishes: {
+    finish: string;
+    sizes: string[];
+  }[];
 }
 
 interface QueuedLabel {
@@ -28,13 +44,13 @@ interface QueuedLabel {
   quantity: number;
 }
 
-interface SizeSelection {
-  [key: string]: boolean;
-}
-
 interface LabelProps {
   labelConfig?: QueuedLabel | null;
   scale?: number;
+}
+
+interface SizeSelection {
+  [key: string]: boolean;
 }
 
 export const LabelGenerator = () => {
@@ -51,6 +67,7 @@ export const LabelGenerator = () => {
   const [labelQuantity, setLabelQuantity] = useState(1);
   const [labelQueue, setLabelQueue] = useState<QueuedLabel[]>([]);
 
+  // Load CSV data
   useEffect(() => {
     const loadCSV = async () => {
       try {
@@ -72,7 +89,14 @@ export const LabelGenerator = () => {
               "Color Code + Color Name": values[6] || '',
               nominalsize_1: values[7] || '',
               nominalsize_2: values[8] || '',
-              nominalsize_3: values[9] || ''
+              nominalsize_3: values[9] || '',
+              nominalsize_4: values[10] || '',
+              nominalsize_5: values[11] || '',
+              nominalsize_6: values[12] || '',
+              nominalsize_7: values[13] || '',
+              nominalsize_8: values[14] || '',
+              nominalsize_9: values[15] || '',
+              nominalsize_10: values[16] || ''
             } as LabelItem;
           });
 
@@ -88,32 +112,101 @@ export const LabelGenerator = () => {
     loadCSV();
   }, []);
 
+  // Reset sizes when series changes
   useEffect(() => {
     setSelectedSizes({});
   }, [selectedSeries]);
 
+  // Template path helper function
   const getTemplatePath = (templateName: string) => {
     if (!templateName) return null;
     const cleanName = templateName.trim();
-    return `/templates/daltile/${cleanName}`;
+    return `/templates/daltile/${cleanName.replace(/\.png$/, '.jpg')}`;
   };
 
+  // Updated memoized selectors for dropdowns
+  const brands = useMemo(() => [...new Set(labelData.map(item => item.Brand))], [labelData]);
+  
+  const series = useMemo(() => {
+    if (!selectedBrand) return [];
+    return [...new Set(labelData
+      .filter(item => item.Brand === selectedBrand)
+      .map(item => item.seriesname))];
+  }, [selectedBrand, labelData]);
+
+  // Updated color codes logic to use Color Code + Color Name
+  const colorCodes = useMemo(() => {
+    if (!selectedSeries) return [];
+    
+    const colorMap = new Map<string, ColorData>();
+    
+    labelData
+      .filter(item => 
+        item.Brand === selectedBrand && 
+        item.seriesname === selectedSeries
+      )
+      .forEach(item => {
+        const colorKey = item['Color Code + Color Name'];
+        
+        if (!colorMap.has(colorKey) && colorKey) {
+          colorMap.set(colorKey, {
+            code: colorKey,
+            displayName: colorKey,
+            finishes: []
+          });
+        }
+        
+        const colorData = colorMap.get(colorKey);
+        if (colorData && item.finish && item.finish !== "NULL") {
+          const existingFinish = colorData.finishes.find(f => f.finish === item.finish);
+          
+          if (!existingFinish) {
+            const sizes = Array.from({ length: 10 }, (_, i) => item[`nominalsize_${i + 1}` as keyof LabelItem])
+              .filter(size => size && size !== '');
+            
+            colorData.finishes.push({
+              finish: item.finish,
+              sizes
+            });
+          }
+        }
+      });
+    
+    return Array.from(colorMap.values());
+  }, [selectedBrand, selectedSeries, labelData]);
+
+  // Updated finishes selector
+  const finishesForColor = useMemo(() => {
+    if (!selectedColorCode) return [];
+    const colorData = colorCodes.find(c => c.displayName === selectedColorCode);
+    return colorData?.finishes || [];
+  }, [selectedColorCode, colorCodes]);
+
+  // New available sizes selector
+  const availableSizes = useMemo(() => {
+    if (!selectedFinish || !selectedColorCode) return [];
+    const colorData = colorCodes.find(c => c.displayName === selectedColorCode);
+    const finishData = colorData?.finishes.find(f => f.finish === selectedFinish);
+    return finishData?.sizes || [];
+  }, [selectedColorCode, selectedFinish, colorCodes]);
+
+  // Updated Label component with new color matching
   const Label = ({ labelConfig = null, scale = 1 }: LabelProps) => {
     const selectedData = labelConfig ? 
       labelData.find(item => 
         item.Brand === labelConfig.brand &&
         item.seriesname === labelConfig.series &&
-        item.colorcode === labelConfig.colorCode
+        item['Color Code + Color Name'] === labelConfig.colorCode
       ) :
       labelData.find(item => 
         item.Brand === selectedBrand &&
         item.seriesname === selectedSeries &&
-        item.colorcode === selectedColorCode
+        item['Color Code + Color Name'] === selectedColorCode
       );
 
     const templatePath = selectedData ? getTemplatePath(selectedData['Background Template']) : null;
     const sizes = labelConfig ? labelConfig.sizes : selectedSizes;
-    
+
     const baseWidth = 2 * 96;
     const baseHeight = 3 * 96;
 
@@ -141,22 +234,33 @@ export const LabelGenerator = () => {
             }}
           />
         )}
-        
-        <div 
-          style={{
-            position: 'absolute',
-            top: 'calc(2in + 0.25in)',
-            left: 0,
-            right: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'flex-start',
-            textAlign: 'center',
-          }}
-        >
-          {selectedData && (
-            <>
+        {selectedData && (
+          <div 
+            style={{
+              position: 'absolute',
+              top: 'calc(2in + 0.25in)',
+              left: 0,
+              right: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'flex-start',
+              textAlign: 'center',
+            }}
+          >
+            <div style={{
+              fontFamily: 'Geometria, Arial, sans-serif',
+              fontSize: `${8 * scale}px`,
+              lineHeight: '1.2',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              fontWeight: '500',
+              color: '#000000',
+              margin: '1px 0',
+            }}>
+              {selectedData['Color Code + Color Name']}
+            </div>
+            {(labelConfig ? labelConfig.finish : selectedFinish) && (
               <div style={{
                 fontFamily: 'Geometria, Arial, sans-serif',
                 fontSize: `${8 * scale}px`,
@@ -167,42 +271,30 @@ export const LabelGenerator = () => {
                 color: '#000000',
                 margin: '1px 0',
               }}>
-                {selectedData['Color Code + Color Name']}
+                {labelConfig ? labelConfig.finish : selectedFinish}
               </div>
-              {(labelConfig ? labelConfig.finish : selectedFinish) && (
-                <div style={{
-                  fontFamily: 'Geometria, Arial, sans-serif',
-                  fontSize: `${8 * scale}px`,
-                  lineHeight: '1.2',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  fontWeight: '500',
-                  color: '#000000',
-                  margin: '1px 0',
-                }}>
-                  {labelConfig ? labelConfig.finish : selectedFinish}
-                </div>
-              )}
-              {selectedSizesText && (
-                <div style={{
-                  fontFamily: 'Geometria, Arial, sans-serif',
-                  fontSize: `${8 * scale}px`,
-                  lineHeight: '1.2',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  fontWeight: '500',
-                  color: '#000000',
-                  margin: '1px 0',
-                }}>
-                  {selectedSizesText}
-                </div>
-              )}
-            </>
-          )}
-        </div>
+            )}
+            {selectedSizesText && (
+              <div style={{
+                fontFamily: 'Geometria, Arial, sans-serif',
+                fontSize: `${8 * scale}px`,
+                lineHeight: '1.2',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                fontWeight: '500',
+                color: '#000000',
+                margin: '1px 0',
+              }}>
+                {selectedSizesText}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   };
+
+  // Print Layout component remains the same
   const PrintLayout = () => {
     const expandedLabels = labelQueue.flatMap(label => 
       Array(label.quantity).fill(label)
@@ -226,7 +318,7 @@ export const LabelGenerator = () => {
             display: 'grid',
             gridTemplateColumns: 'repeat(4, 2in)',
             gridTemplateRows: 'repeat(2, 3in)',
-            gap: '0.25in',
+            gap: '0.3in',
             pageBreakAfter: 'always',
             pageBreakInside: 'avoid',
             margin: 0,
@@ -262,60 +354,7 @@ export const LabelGenerator = () => {
     );
   };
 
-  const brands = useMemo(() => [...new Set(labelData.map(item => item.Brand))], [labelData]);
-  
-  const series = useMemo(() => {
-    if (!selectedBrand) return [];
-    return [...new Set(labelData
-      .filter(item => item.Brand === selectedBrand)
-      .map(item => item.seriesname))];
-  }, [selectedBrand, labelData]);
-
-  const colorCodes = useMemo(() => {
-    if (!selectedSeries) return [];
-    return [...new Set(labelData
-      .filter(item => 
-        item.Brand === selectedBrand && 
-        item.seriesname === selectedSeries)
-      .map(item => ({
-        code: item.colorcode,
-        displayName: item['Color Code + Color Name']
-      })))];
-  }, [selectedBrand, selectedSeries, labelData]);
-
-  const finishes = useMemo(() => {
-    if (!selectedSeries) return [];
-    return [...new Set(labelData
-      .filter(item => 
-        item.Brand === selectedBrand && 
-        item.seriesname === selectedSeries &&
-        item.colorcode === selectedColorCode
-      )
-      .map(item => item.finish))]
-      .filter(finish => finish && finish !== "NULL");
-  }, [selectedBrand, selectedSeries, selectedColorCode, labelData]);
-
-  const availableSizes = useMemo(() => {
-    if (!selectedSeries) return [];
-    
-    const sizes = new Set<string>();
-    labelData
-      .filter(item => 
-        item.Brand === selectedBrand && 
-        item.seriesname === selectedSeries &&
-        item.colorcode === selectedColorCode
-      )
-      .forEach(item => {
-        ['nominalsize_1', 'nominalsize_2', 'nominalsize_3'].forEach(sizeKey => {
-          if (item[sizeKey as keyof LabelItem] && item[sizeKey as keyof LabelItem] !== '') {
-            sizes.add(item[sizeKey as keyof LabelItem]);
-          }
-        });
-      });
-    
-    return Array.from(sizes).sort();
-  }, [selectedBrand, selectedSeries, selectedColorCode, labelData]);
-
+  // Updated handleAddToQueue with new color matching
   const handleAddToQueue = () => {
     if (!selectedColorCode) return;
     
@@ -325,25 +364,19 @@ export const LabelGenerator = () => {
       return;
     }
 
-    const selectedData = labelData.find(item => 
-      item.Brand === selectedBrand &&
-      item.seriesname === selectedSeries &&
-      item.colorcode === selectedColorCode
-    );
-
     const newLabel: QueuedLabel = {
       brand: selectedBrand,
       series: selectedSeries,
       colorCode: selectedColorCode,
-      finish: selectedFinish,
-      sizes: { ...selectedSizes },
-      displayName: selectedData?.['Color Code + Color Name'] || selectedColorCode,
-      quantity: labelQuantity
+      finish: selectedFinish || 'N/A', // Ensure finish is included even if optional
+      sizes: { ...selectedSizes }, // Ensure sizes are included
+      displayName: selectedColorCode,
+      quantity: labelQuantity,
     };
 
     setLabelQueue(prev => [...prev, newLabel]);
 
-    // Reset all dropdowns and selections after adding to queue
+    // Reset form state
     setSelectedBrand('');
     setSelectedSeries('');
     setSelectedColorCode('');
@@ -406,6 +439,7 @@ export const LabelGenerator = () => {
     <div className="p-6 max-w-6xl mx-auto">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <div className="space-y-6">
+          {/* Brand Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Brand</label>
             <select 
@@ -426,6 +460,7 @@ export const LabelGenerator = () => {
             </select>
           </div>
 
+          {/* Series Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Series</label>
             <select 
@@ -446,6 +481,7 @@ export const LabelGenerator = () => {
             </select>
           </div>
 
+          {/* Updated Color Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Color</label>
             <select 
@@ -454,31 +490,39 @@ export const LabelGenerator = () => {
               onChange={(e) => {
                 setSelectedColorCode(e.target.value);
                 setSelectedFinish('');
+                setSelectedSizes({});
               }}
               disabled={!selectedSeries}
             >
               <option value="">Select Color</option>
-              {colorCodes.map(({ code, displayName }) => (
-                <option key={code} value={code}>{displayName}</option>
+              {colorCodes.map(({ displayName }) => (
+                <option key={displayName} value={displayName}>{displayName}</option>
               ))}
             </select>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Finish</label>
-            <select 
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-              value={selectedFinish}
-              onChange={(e) => setSelectedFinish(e.target.value)}
-              disabled={!selectedColorCode}
-            >
-              <option value="">Select Finish</option>
-              {finishes.map(finish => (
-                <option key={finish} value={finish}>{finish}</option>
-              ))}
-            </select>
-          </div>
+          {/* Finish Selection */}
+          {finishesForColor.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Finish</label>
+              <select 
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                value={selectedFinish}
+                onChange={(e) => {
+                  setSelectedFinish(e.target.value);
+                  setSelectedSizes({});
+                }}
+                disabled={!selectedColorCode}
+              >
+                <option value="">Select Finish</option>
+                {finishesForColor.map(({ finish }) => (
+                  <option key={finish} value={finish}>{finish}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
+          {/* Size Selection */}
           {availableSizes.length > 0 && (
             <div className="mt-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">Available Sizes</label>
@@ -509,8 +553,8 @@ export const LabelGenerator = () => {
             </div>
           )}
 
-          {/* Quantity Selector */}
-          <div className="mt-4">
+          {/* Quantity Selection */}
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Quantity (Total {labelQueue.reduce((sum, label) => sum + label.quantity, 0)}/8)
             </label>
@@ -529,8 +573,8 @@ export const LabelGenerator = () => {
             />
           </div>
 
-          {/* Add to Queue button */}
-          <div className="mt-4">
+          {/* Add to Queue Button */}
+          <div>
             <button
               className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
               onClick={handleAddToQueue}
@@ -565,11 +609,13 @@ export const LabelGenerator = () => {
           )}
         </div>
 
+        {/* Preview Panel */}
         <div className="border rounded-lg p-4 bg-white min-h-[384px] flex items-center justify-center">
           <Label scale={1} />
         </div>
       </div>
 
+      {/* Print Layout Dialog */}
       <Dialog open={showPrintLayout} onOpenChange={setShowPrintLayout}>
         <DialogContent className="max-w-[95vw] w-[95vw] max-h-[95vh] overflow-y-auto">
           <div id="print-layout" className="bg-white flex items-center justify-center">
@@ -592,6 +638,7 @@ export const LabelGenerator = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Print Layout Button */}
       <div className="mt-8">
         <button
           className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
