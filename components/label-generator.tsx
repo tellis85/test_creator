@@ -57,7 +57,7 @@ export const LabelGenerator = () => {
   const [labelData, setLabelData] = useState<LabelItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [previewScale, setPreviewScale] = useState(1.25);
+  const [previewScale, setPreviewScale] = useState(1.75);
 
   const [selectedBrand, setSelectedBrand] = useState('');
   const [selectedSeries, setSelectedSeries] = useState('');
@@ -631,7 +631,7 @@ export const LabelGenerator = () => {
               </button>
               <button
                 className="px-2 py-1 text-sm border rounded hover:bg-gray-50"
-                onClick={() => setPreviewScale(1.25)}
+                onClick={() => setPreviewScale(1.75)}
               >
                 Reset
               </button>
@@ -643,7 +643,7 @@ export const LabelGenerator = () => {
               </button>
             </div>
           </div>
-          <div className="border rounded-lg p-4 bg-white min-h-[384px] flex items-center justify-center overflow-auto">
+          <div className="border rounded-lg p-4 bg-white min-h-[600px] flex items-center justify-center overflow-auto">
             <div style={{ transform: `scale(${previewScale})`, transformOrigin: 'center center', transition: 'transform 0.2s' }}>
               <Label scale={1} />
             </div>
