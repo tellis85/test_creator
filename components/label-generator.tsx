@@ -185,7 +185,11 @@ export const LabelGenerator = () => {
     if (!selectedFinish || !selectedColorCode) return [];
     const colorData = colorCodes.find(c => c.displayName === selectedColorCode);
     const finishData = colorData?.finishes.find(f => f.finish === selectedFinish);
-    return finishData?.sizes || [];
+    return finishData?.sizes.sort((a, b) => {
+      const numA = parseFloat(a.replace(/[^\d.]/g, ''));
+      const numB = parseFloat(b.replace(/[^\d.]/g, ''));
+      return numA - numB;
+    }) || [];
   }, [selectedColorCode, selectedFinish, colorCodes]);
   // Label Component
   const Label = ({ labelConfig = null, scale = 1 }: LabelProps) => {
