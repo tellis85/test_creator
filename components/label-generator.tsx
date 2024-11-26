@@ -38,7 +38,7 @@ interface QueuedLabel {
   brand: string;
   series: string;
   colorCode: string;
-  finish: string;
+  finishes: string[];  // Modified to array
   sizes: { [key: string]: boolean };
   displayName: string;
   quantity: number;
@@ -62,7 +62,7 @@ export const LabelGenerator = () => {
   const [selectedBrand, setSelectedBrand] = useState('');
   const [selectedSeries, setSelectedSeries] = useState('');
   const [selectedColorCode, setSelectedColorCode] = useState('');
-  const [selectedFinish, setSelectedFinish] = useState('');
+  const [selectedFinishes, setSelectedFinishes] = useState<string[]>([]); // Modified to array
   const [selectedSizes, setSelectedSizes] = useState<SizeSelection>({});
   const [showPrintLayout, setShowPrintLayout] = useState(false);
   const [labelQuantity, setLabelQuantity] = useState('');
@@ -182,15 +182,21 @@ export const LabelGenerator = () => {
   }, [selectedColorCode, colorCodes]);
 
   const availableSizes = useMemo(() => {
-    if (!selectedFinish || !selectedColorCode) return [];
+    if (selectedFinishes.length === 0 || !selectedColorCode) return [];
     const colorData = colorCodes.find(c => c.displayName === selectedColorCode);
-    const finishData = colorData?.finishes.find(f => f.finish === selectedFinish);
-    return finishData?.sizes.sort((a, b) => {
+    const allSizes = new Set<string>();
+    
+    selectedFinishes.forEach(finish => {
+      const finishData = colorData?.finishes.find(f => f.finish === finish);
+      finishData?.sizes.forEach(size => allSizes.add(size));
+    });
+
+    return Array.from(allSizes).sort((a, b) => {
       const numA = parseFloat(a.replace(/[^\d.]/g, ''));
       const numB = parseFloat(b.replace(/[^\d.]/g, ''));
       return numA - numB;
-    }) || [];
-  }, [selectedColorCode, selectedFinish, colorCodes]);
+    });
+  }, [selectedColorCode, selectedFinishes, colorCodes]);
   // Label Component
   const Label = ({ labelConfig = null, scale = 1 }: LabelProps) => {
     const selectedData = labelConfig ? 
@@ -208,17 +214,17 @@ export const LabelGenerator = () => {
     const templatePath = selectedData ? getTemplatePath(selectedData['Background Template']) : null;
     const sizes = labelConfig ? labelConfig.sizes : selectedSizes;
   
-    const baseWidth = 2 * 96;
-    const baseHeight = 3 * 96;
-  
     const selectedSizesText = Object.entries(sizes)
       .filter(([_, isSelected]) => isSelected)
       .map(([size]) => size)
       .join(', ');
   
     const displayColorCode = labelConfig ? labelConfig.colorCode : selectedColorCode;
-    const displayFinish = labelConfig ? labelConfig.finish : selectedFinish;
+    const displayFinishes = labelConfig ? labelConfig.finishes : selectedFinishes;
   
+    const baseWidth = 2 * 96;
+    const baseHeight = 3 * 96;
+
     return (
       <div 
         className="relative bg-white"
@@ -242,7 +248,7 @@ export const LabelGenerator = () => {
           <div 
             style={{
               position: 'absolute',
-              top: 'calc(2in + 0.25in)',
+              top: 'calc(2in + 0.21875in)',
               left: 0,
               right: 0,
               display: 'flex',
@@ -266,7 +272,7 @@ export const LabelGenerator = () => {
                 {displayColorCode}
               </div>
             )}
-            {displayFinish && displayFinish !== 'N/A' && (
+            {displayFinishes.length > 0 && (
               <div style={{
                 fontFamily: 'Geometria, Arial, sans-serif',
                 fontSize: `${8 * scale}px`,
@@ -277,7 +283,7 @@ export const LabelGenerator = () => {
                 color: '#000000',
                 margin: '1px 0',
               }}>
-                {displayFinish}
+                {displayFinishes.join(', ')}
               </div>
             )}
             {selectedSizesText && (
@@ -299,18 +305,18 @@ export const LabelGenerator = () => {
       </div>
     );
   };
-
   // Print Layout component
   const PrintLayout = () => {
     const expandedLabels = labelQueue.flatMap(label => 
       Array(label.quantity).fill(label)
     );
     
-    const totalSheets = Math.ceil(expandedLabels.length / 8);
+    const labelsPerSheet = 8;
+    const totalSheets = Math.ceil(expandedLabels.length / labelsPerSheet);
     const sheets = Array.from({ length: totalSheets }, (_, sheetIndex) => {
-      const startIdx = sheetIndex * 8;
-      const sheetLabels = expandedLabels.slice(startIdx, startIdx + 8);
-      const emptySlots = 8 - sheetLabels.length;
+      const startIdx = sheetIndex * labelsPerSheet;
+      const sheetLabels = expandedLabels.slice(startIdx, startIdx + labelsPerSheet);
+      const emptySlots = labelsPerSheet - sheetLabels.length;
       
       return (
         <div 
@@ -333,7 +339,11 @@ export const LabelGenerator = () => {
               display: 'grid',
               gridTemplateColumns: 'repeat(4, 2in)',
               gridTemplateRows: 'repeat(2, 3in)',
-              gap: '0.3in',
+              // You can adjust these values to change spacing:
+              columnGap: '0.35in',  // Space between columns
+              rowGap: '0.8in',     // Space between rows
+              // Or use a single gap for both:
+              // gap: '0.25in',     // Same space for both rows and columns
               pageBreakInside: 'avoid',
               margin: 0,
               padding: 0
@@ -369,15 +379,17 @@ export const LabelGenerator = () => {
     });
 
     return <div>{sheets}</div>;
-  };// Event Handlers
+  };
+
+  // Event Handlers
   const handleAddToQueue = () => {
-    if (!selectedColorCode) return;
+    if (!selectedColorCode || selectedFinishes.length === 0) return;
     
     const newLabel: QueuedLabel = {
       brand: selectedBrand,
       series: selectedSeries,
       colorCode: selectedColorCode,
-      finish: selectedFinish,
+      finishes: [...selectedFinishes],
       sizes: { ...selectedSizes },
       displayName: selectedColorCode,
       quantity: Number(labelQuantity),
@@ -440,7 +452,6 @@ export const LabelGenerator = () => {
       alert('Failed to generate PDF. Please try again.');
     }
   };
-
   if (loading) {
     return <div className="p-8 text-center">Loading label data...</div>;
   }
@@ -448,7 +459,7 @@ export const LabelGenerator = () => {
   if (error) {
     return <div className="p-8 text-center text-red-500">{error}</div>;
   }
-  // Main Render
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -463,7 +474,7 @@ export const LabelGenerator = () => {
                 setSelectedBrand(e.target.value);
                 setSelectedSeries('');
                 setSelectedColorCode('');
-                setSelectedFinish('');
+                setSelectedFinishes([]);
                 setSelectedSizes({});
               }}
             >
@@ -483,7 +494,7 @@ export const LabelGenerator = () => {
               onChange={(e) => {
                 setSelectedSeries(e.target.value);
                 setSelectedColorCode('');
-                setSelectedFinish('');
+                setSelectedFinishes([]);
                 setSelectedSizes({});
               }}
               disabled={!selectedBrand}
@@ -503,7 +514,7 @@ export const LabelGenerator = () => {
               value={selectedColorCode}
               onChange={(e) => {
                 setSelectedColorCode(e.target.value);
-                setSelectedFinish('');
+                setSelectedFinishes([]);
                 setSelectedSizes({});
               }}
               disabled={!selectedSeries}
@@ -515,24 +526,37 @@ export const LabelGenerator = () => {
             </select>
           </div>
 
-          {/* Finish Selection */}
+          {/* Finish Selection - Modified to checkboxes */}
           {finishesForColor.length > 0 && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Finish</label>
-              <select 
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                value={selectedFinish}
-                onChange={(e) => {
-                  setSelectedFinish(e.target.value);
-                  setSelectedSizes({});
-                }}
-                disabled={!selectedColorCode}
-              >
-                <option value="">Select Finish</option>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Finishes</label>
+              <div className="space-y-2">
                 {finishesForColor.map(({ finish }) => (
-                  <option key={finish} value={finish}>{finish}</option>
+                  <div key={finish} className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id={`finish-${finish}`}
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      checked={selectedFinishes.includes(finish)}
+                      onChange={(e) => {
+                        setSelectedFinishes(prev =>
+                          e.target.checked
+                            ? [...prev, finish]
+                            : prev.filter(f => f !== finish)
+                        );
+                        setSelectedSizes({});
+                      }}
+                      disabled={!selectedColorCode}
+                    />
+                    <label
+                      htmlFor={`finish-${finish}`}
+                      className="ml-2 text-sm text-gray-700"
+                    >
+                      {finish}
+                    </label>
+                  </div>
                 ))}
-              </select>
+              </div>
             </div>
           )}
 
@@ -591,7 +615,7 @@ export const LabelGenerator = () => {
             <button
               className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
               onClick={handleAddToQueue}
-              disabled={!selectedColorCode}
+              disabled={!selectedColorCode || selectedFinishes.length === 0}
             >
               Add Label to Queue
             </button>
