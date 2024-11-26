@@ -254,7 +254,7 @@ export const LabelGenerator = () => {
           <div 
             style={{
               position: 'absolute',
-              top: 'calc(2in + 0.21875in)',
+              top: 'calc(2in + 0.1875in)',
               left: 0,
               right: 0,
               display: 'flex',
@@ -268,12 +268,13 @@ export const LabelGenerator = () => {
               <div style={{
                 fontFamily: 'Geometria, Arial, sans-serif',
                 fontSize: `${8 * scale}px`,
-                lineHeight: '1.2',
+                lineHeight: '1.1',
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
                 fontWeight: '500',
                 color: '#000000',
-                margin: '1px 0',
+                margin: '0',  // Removed margin
+                padding: '0'  // Added 0 padding
               }}>
                 {displayColorCode}
               </div>
@@ -282,12 +283,13 @@ export const LabelGenerator = () => {
               <div style={{
                 fontFamily: 'Geometria, Arial, sans-serif',
                 fontSize: `${8 * scale}px`,
-                lineHeight: '1.2',
+                lineHeight: '1.1',
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
                 fontWeight: '500',
                 color: '#000000',
-                margin: '1px 0',
+                margin: '0',  // Removed margin
+                padding: '0'  // Added 0 padding
               }}>
                 {displayFinishes.join(', ')}
               </div>
@@ -296,12 +298,13 @@ export const LabelGenerator = () => {
               <div style={{
                 fontFamily: 'Geometria, Arial, sans-serif',
                 fontSize: `${8 * scale}px`,
-                lineHeight: '1.2',
+                lineHeight: '1.1',
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
                 fontWeight: '500',
                 color: '#000000',
-                margin: '1px 0',
+                margin: '0',  // Removed margin
+                padding: '0'  // Added 0 padding
               }}>
                 {selectedSizesText}
               </div>
