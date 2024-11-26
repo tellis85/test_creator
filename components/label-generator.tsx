@@ -223,7 +223,8 @@ export const LabelGenerator = () => {
     const selectedSizesText = Object.entries(sizes)
       .filter(([_, isSelected]) => isSelected)
       .map(([size]) => size)
-      .join(', ');
+      .map(size => `<span style="white-space: nowrap">${size}</span>`)  // Wrap each size in a nowrap span
+      .join(', ');  // Join with comma and space
   
     const displayColorCode = labelConfig ? labelConfig.colorCode : selectedColorCode;
     const displayFinishes = labelConfig ? labelConfig.finishes : selectedFinishes;
@@ -268,7 +269,7 @@ export const LabelGenerator = () => {
               <div style={{
                 fontFamily: 'Geometria, Arial, sans-serif',
                 fontSize: `${8 * scale}px`,
-                lineHeight: '1.1',
+                lineHeight: '1.2',
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
                 fontWeight: '500',
@@ -283,7 +284,7 @@ export const LabelGenerator = () => {
               <div style={{
                 fontFamily: 'Geometria, Arial, sans-serif',
                 fontSize: `${8 * scale}px`,
-                lineHeight: '1.1',
+                lineHeight: '1.2',
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
                 fontWeight: '500',
@@ -294,20 +295,23 @@ export const LabelGenerator = () => {
                 {displayFinishes.join(', ')}
               </div>
             )}
-            {selectedSizesText && (
-              <div style={{
-                fontFamily: 'Geometria, Arial, sans-serif',
-                fontSize: `${8 * scale}px`,
-                lineHeight: '1.1',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                fontWeight: '500',
-                color: '#000000',
-                margin: '0',  // Removed margin
-                padding: '0'  // Added 0 padding
-              }}>
-                {selectedSizesText}
-              </div>
+             {selectedSizesText && (
+              <div 
+                style={{
+                  fontFamily: 'Geometria, Arial, sans-serif',
+                  fontSize: `${8 * scale}px`,
+                  lineHeight: '1.1',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  fontWeight: '500',
+                  color: '#000000',
+                  margin: '0',
+                  padding: '0',
+                  width: '1.7in',     // Control width of the container
+                  wordBreak: 'break-word',  // Allow breaks between words
+                }}
+                dangerouslySetInnerHTML={{ __html: selectedSizesText }}  // Render the HTML spans
+              />
             )}
           </div>
         )}
