@@ -172,7 +172,13 @@ export const LabelGenerator = () => {
         }
       });
     
-    return Array.from(colorMap.values());
+    // Convert to array and sort alphabetically by displayName
+    return Array.from(colorMap.values()).sort((a, b) => 
+      a.displayName.localeCompare(b.displayName, undefined, { 
+        numeric: true, 
+        sensitivity: 'base' 
+      })
+    );
   }, [selectedBrand, selectedSeries, labelData]);
 
   const finishesForColor = useMemo(() => {
