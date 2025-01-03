@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Eye } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -38,7 +39,7 @@ interface QueuedLabel {
   brand: string;
   series: string;
   colorCode: string;
-  finishes: string[];  // Modified to array
+  finishes: string[];
   sizes: { [key: string]: boolean };
   displayName: string;
   quantity: number;
@@ -58,15 +59,17 @@ export const LabelGenerator = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [previewScale, setPreviewScale] = useState(1.75);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isPrintLayoutVisible, setIsPrintLayoutVisible] = useState(false);
 
   const [selectedBrand, setSelectedBrand] = useState('');
   const [selectedSeries, setSelectedSeries] = useState('');
   const [selectedColorCode, setSelectedColorCode] = useState('');
-  const [selectedFinishes, setSelectedFinishes] = useState<string[]>([]); // Modified to array
+  const [selectedFinishes, setSelectedFinishes] = useState<string[]>([]);
   const [selectedSizes, setSelectedSizes] = useState<SizeSelection>({});
-  const [showPrintLayout, setShowPrintLayout] = useState(false);
   const [labelQuantity, setLabelQuantity] = useState('');
   const [labelQueue, setLabelQueue] = useState<QueuedLabel[]>([]);
+
   // Load CSV data
   useEffect(() => {
     const loadCSV = async () => {
@@ -112,19 +115,37 @@ export const LabelGenerator = () => {
     loadCSV();
   }, []);
 
-  // Reset sizes when series changes
   useEffect(() => {
     setSelectedSizes({});
   }, [selectedSeries]);
 
-  // Template path helper function
+  const loadImage = (url: string): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Failed to get canvas context'));
+          return;
+        }
+        ctx.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL('image/jpeg'));
+      };
+      img.onerror = () => reject(new Error(`Failed to load image: ${url}`));
+      img.src = url;
+    });
+  };
+
   const getTemplatePath = (templateName: string) => {
     if (!templateName) return null;
     const cleanName = templateName.trim();
     return `/templates/daltile/${cleanName.replace(/\.png$/, '.jpg')}`;
   };
 
-  // Memoized selectors for dropdowns
   const brands = useMemo(() => [...new Set(labelData.map(item => item.Brand))], [labelData]);
   
   const series = useMemo(() => {
@@ -134,7 +155,6 @@ export const LabelGenerator = () => {
       .map(item => item.seriesname))];
   }, [selectedBrand, labelData]);
 
-  // Color codes logic
   const colorCodes = useMemo(() => {
     if (!selectedSeries) return [];
     
@@ -172,7 +192,6 @@ export const LabelGenerator = () => {
         }
       });
     
-    // Convert to array and sort alphabetically by displayName
     return Array.from(colorMap.values()).sort((a, b) => 
       a.displayName.localeCompare(b.displayName, undefined, { 
         numeric: true, 
@@ -203,19 +222,18 @@ export const LabelGenerator = () => {
       return numA - numB;
     });
   }, [selectedColorCode, selectedFinishes, colorCodes]);
-  // Label Component
+
   const Label = ({ labelConfig = null, scale = 1 }: LabelProps) => {
     const selectedData = labelConfig ? 
-      labelData.find(item => 
-        item.Brand === labelConfig.brand &&
-        item.seriesname === labelConfig.series &&
-        item['Color Code + Color Name'] === labelConfig.colorCode
-      ) :
-      labelData.find(item => 
-        item.Brand === selectedBrand &&
-        item.seriesname === selectedSeries &&
-        item['Color Code + Color Name'] === selectedColorCode
-      );
+  labelData.find(item => 
+    item.Brand === labelConfig.brand &&
+    item.seriesname === labelConfig.series &&
+    item['Color Code + Color Name'] === labelConfig.colorCode
+  ) :
+  labelData.find(item => 
+    item.Brand === selectedBrand &&
+    item.seriesname === selectedSeries
+  );
   
     const templatePath = selectedData ? getTemplatePath(selectedData['Background Template']) : null;
     const sizes = labelConfig ? labelConfig.sizes : selectedSizes;
@@ -223,15 +241,15 @@ export const LabelGenerator = () => {
     const selectedSizesText = Object.entries(sizes)
       .filter(([_, isSelected]) => isSelected)
       .map(([size]) => size)
-      .map(size => `<span style="white-space: nowrap">${size}</span>`)  // Wrap each size in a nowrap span
-      .join(', ');  // Join with comma and space
+      .map(size => `<span style="white-space: nowrap">${size}</span>`)
+      .join(', ');
   
     const displayColorCode = labelConfig ? labelConfig.colorCode : selectedColorCode;
     const displayFinishes = labelConfig ? labelConfig.finishes : selectedFinishes;
   
     const baseWidth = 2 * 96;
     const baseHeight = 3 * 96;
-
+  
     return (
       <div 
         className="relative bg-white"
@@ -240,6 +258,15 @@ export const LabelGenerator = () => {
           height: `${baseHeight * scale}px`,
         }}
       >
+        <style>
+          {`
+            @media print {
+              .label-text-container {
+                top: 50px !important;
+              }
+            }
+          `}
+        </style>
         {templatePath && (
           <img 
             src={templatePath}
@@ -253,9 +280,10 @@ export const LabelGenerator = () => {
         )}
         {selectedData && (
           <div 
+            className="label-text-container"
             style={{
               position: 'absolute',
-              top: 'calc(2in + 0.1875in)',
+              top: '213px',
               left: 0,
               right: 0,
               display: 'flex',
@@ -263,6 +291,7 @@ export const LabelGenerator = () => {
               alignItems: 'center',
               justifyContent: 'flex-start',
               textAlign: 'center',
+              gap: '.5px',
             }}
           >
             {displayColorCode && (
@@ -274,8 +303,8 @@ export const LabelGenerator = () => {
                 letterSpacing: '0.05em',
                 fontWeight: '500',
                 color: '#000000',
-                margin: '0',  // Removed margin
-                padding: '0'  // Added 0 padding
+                margin: '0',
+                padding: '0'
               }}>
                 {displayColorCode}
               </div>
@@ -289,13 +318,13 @@ export const LabelGenerator = () => {
                 letterSpacing: '0.05em',
                 fontWeight: '500',
                 color: '#000000',
-                margin: '0',  // Removed margin
-                padding: '0'  // Added 0 padding
+                margin: '0',
+                padding: '0'
               }}>
                 {displayFinishes.join(', ')}
               </div>
             )}
-             {selectedSizesText && (
+            {selectedSizesText && (
               <div 
                 style={{
                   fontFamily: 'Geometria, Arial, sans-serif',
@@ -307,10 +336,10 @@ export const LabelGenerator = () => {
                   color: '#000000',
                   margin: '0',
                   padding: '0',
-                  width: '1.7in',     // Control width of the container
-                  wordBreak: 'break-word',  // Allow breaks between words
+                  width: '1.7in',
+                  wordBreak: 'break-word',
                 }}
-                dangerouslySetInnerHTML={{ __html: selectedSizesText }}  // Render the HTML spans
+                dangerouslySetInnerHTML={{ __html: selectedSizesText }}
               />
             )}
           </div>
@@ -318,7 +347,7 @@ export const LabelGenerator = () => {
       </div>
     );
   };
-  // Print Layout component
+
   const PrintLayout = () => {
     const expandedLabels = labelQueue.flatMap(label => 
       Array(label.quantity).fill(label)
@@ -352,11 +381,8 @@ export const LabelGenerator = () => {
               display: 'grid',
               gridTemplateColumns: 'repeat(4, 2in)',
               gridTemplateRows: 'repeat(2, 3in)',
-              // You can adjust these values to change spacing:
-              columnGap: '0.35in',  // Space between columns
-              rowGap: '0.8in',     // Space between rows
-              // Or use a single gap for both:
-              // gap: '0.25in',     // Same space for both rows and columns
+              columnGap: '0.35in',
+              rowGap: '0.8in',
               pageBreakInside: 'avoid',
               margin: 0,
               padding: 0
@@ -394,7 +420,110 @@ export const LabelGenerator = () => {
     return <div>{sheets}</div>;
   };
 
-  // Event Handlers
+  const handleGeneratePDF = async (preview = false) => {
+    try {
+      setIsGenerating(true);
+      setIsPrintLayoutVisible(true);
+      
+      // Wait for the print layout to be rendered
+      await new Promise(resolve => setTimeout(resolve, 100));
+  
+      const printLayout = document.getElementById('print-layout');
+      if (!printLayout) {
+        throw new Error('Print layout not found');
+      }
+  
+      const expandedLabels = labelQueue.flatMap(label =>
+        Array(label.quantity).fill(label)
+      );
+      const totalSheets = Math.ceil(expandedLabels.length / 8);
+      
+      const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'in',
+        format: [11, 8.5]
+      });
+  
+      for (let i = 0; i < totalSheets; i++) {
+        const sheet = document.getElementById(`sheet-${i}`);
+        if (!sheet) continue;
+  
+        if (i > 0) {
+          pdf.addPage([11, 8.5], 'landscape');
+        }
+  
+        try {
+          // Get all images in the sheet
+          const images = sheet.getElementsByTagName('img');
+          for (let img of Array.from(images)) {
+            if (img.src.startsWith('data:')) continue;
+            const base64Image = await loadImage(img.src);
+            img.src = base64Image;
+          }
+  
+          // Wait for images to be loaded
+          await new Promise(resolve => setTimeout(resolve, 50));
+  
+          // Capture the sheet with adjusted settings
+          const canvas = await html2canvas(sheet, {
+            scale: 4,
+            useCORS: true,
+            logging: false,
+            width: 11 * 96,
+            height: 8.5 * 96,
+            backgroundColor: '#ffffff',
+            // Add these new options
+            windowWidth: 11 * 96,
+            windowHeight: 8.5 * 96,
+            scrollX: 0,
+            scrollY: 0,
+            x: 0,
+            y: 0,
+            // Force a specific DPI
+            foreignObjectRendering: false,
+            imageTimeout: 0,
+            // Add custom HTML2Canvas options
+            onclone: (clonedDoc) => {
+              // Find all text containers in cloned document
+              const textContainers = clonedDoc.getElementsByClassName('label-text-container');
+              for (let container of Array.from(textContainers)) {
+                // Adjust the position for PDF output
+                const element = container as HTMLElement;
+                element.style.top = '206px'; // Adjust this value as needed
+                element.style.transform = 'none';
+                element.style.webkitTransform = 'none';
+                element.style.position = 'absolute';
+              }
+            }
+          });
+  
+          // Add the image to PDF with specific positioning
+          const imgData = canvas.toDataURL('image/png', 1.0);
+          pdf.addImage(imgData, 'PNG', 0, 0, 11, 8.5, undefined, 'FAST');
+  
+        } catch (err) {
+          console.error('Error processing sheet:', err);
+          continue;
+        }
+      }
+  
+      if (preview) {
+        const pdfBlob = pdf.output('blob');
+        const pdfUrl = URL.createObjectURL(pdfBlob);
+        window.open(pdfUrl, '_blank');
+        setTimeout(() => URL.revokeObjectURL(pdfUrl), 100);
+      } else {
+        pdf.save('labels.pdf');
+      }
+    } catch (err) {
+      console.error('Error generating PDF:', err);
+      alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setIsGenerating(false);
+      setIsPrintLayoutVisible(false);
+    }
+  };
+
   const handleAddToQueue = () => {
     if (!selectedColorCode || selectedFinishes.length === 0) return;
     
@@ -416,55 +545,6 @@ export const LabelGenerator = () => {
     setLabelQueue(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleGeneratePDF = async () => {
-    const printLayout = document.getElementById('print-layout');
-    if (!printLayout) return;
-
-    try {
-      const expandedLabels = labelQueue.flatMap(label => 
-        Array(label.quantity).fill(label)
-      );
-      const totalSheets = Math.ceil(expandedLabels.length / 8);
-      
-      const pdf = new jsPDF({
-        orientation: 'landscape',
-        unit: 'in',
-        format: [11, 8.5]
-      });
-
-      for (let i = 0; i < totalSheets; i++) {
-        const sheet = document.getElementById(`sheet-${i}`);
-        if (!sheet) continue;
-
-        if (i > 0) {
-          pdf.addPage([11, 8.5], 'landscape');
-        }
-
-        const canvas = await html2canvas(sheet, {
-          scale: 4,
-          useCORS: true,
-          logging: false,
-          width: 11 * 96,
-          height: 8.5 * 96,
-          backgroundColor: '#ffffff',
-          windowWidth: 11 * 96,
-          windowHeight: 8.5 * 96,
-          x: 0,
-          y: 0,
-          scrollX: 0,
-          scrollY: 0
-        });
-
-        const imgData = canvas.toDataURL('image/png', 1.0);
-        pdf.addImage(imgData, 'PNG', 0, 0, 11, 8.5, undefined, 'FAST');
-      }
-
-      pdf.save('labels.pdf');
-    } catch (err) {
-      console.error('Error generating PDF:', err);
-      alert('Failed to generate PDF. Please try again.');
-    }
-  };
   if (loading) {
     return <div className="p-8 text-center">Loading label data...</div>;
   }
@@ -475,7 +555,9 @@ export const LabelGenerator = () => {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
+      {/* Main content grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* Left column - Selection controls */}
         <div className="space-y-6">
           {/* Brand Selection */}
           <div>
@@ -659,7 +741,7 @@ export const LabelGenerator = () => {
           )}
         </div>
 
-        {/* Preview Panel with Zoom Controls */}
+        {/* Right column - Preview */}
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <span className="text-sm font-medium text-gray-700">Preview ({Math.round(previewScale * 100)}%)</span>
@@ -692,39 +774,43 @@ export const LabelGenerator = () => {
         </div>
       </div>
 
-      {/* Print Layout Dialog */}
-      <Dialog open={showPrintLayout} onOpenChange={setShowPrintLayout}>
-        <DialogContent className="max-w-[95vw] w-[95vw] max-h-[95vh] overflow-y-auto">
-          <DialogTitle>Print Layout Preview</DialogTitle>
-          <div id="print-layout" className="bg-white flex items-center justify-center">
-            <PrintLayout />
-          </div>
-          <div className="mt-4 flex justify-end gap-2">
-            <button
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-              onClick={() => setShowPrintLayout(false)}
-            >
-              Close
-            </button>
-            <button
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
-              onClick={handleGeneratePDF}
-            >
-              Download PDF
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Print Layout - Hidden but used for rendering */}
+      <div 
+  id="print-layout" 
+  style={{ 
+    display: isPrintLayoutVisible ? 'block' : 'none',
+    position: 'fixed',
+    left: '-9999px',
+    top: '-9999px'
+  }}
+>
+  <PrintLayout />
+</div>
 
-      {/* Print Layout Button */}
+      {/* Preview/Print Button */}
       <div className="mt-8">
         <button
-          className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          onClick={() => setShowPrintLayout(true)}
-          disabled={labelQueue.length === 0}
+          className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 flex items-center justify-center gap-2"
+          onClick={() => handleGeneratePDF(true)}
+          disabled={labelQueue.length === 0 || isGenerating}
         >
-          Preview Print Layout ({labelQueue.reduce((sum, label) => sum + label.quantity, 0)} labels on {Math.ceil(labelQueue.reduce((sum, label) => sum + label.quantity, 0) / 8)} sheets)
+          {isGenerating ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+              Generating PDF...
+            </>
+          ) : (
+            <>
+              <Eye className="w-4 h-4" />
+              Preview PDF ({labelQueue.reduce((sum, label) => sum + label.quantity, 0)} labels on {Math.ceil(labelQueue.reduce((sum, label) => sum + label.quantity, 0) / 8)} sheets)
+            </>
+          )}
         </button>
+      </div>
+      <div className="mt-4 text-center">
+        <span style={{ fontSize: '30pt', fontWeight: 'bold', color: 'red' }}>
+          ***Use Avery Label Presta 94237***
+        </span>
       </div>
     </div>
   );
