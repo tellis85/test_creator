@@ -525,7 +525,7 @@ export const LabelGenerator = () => {
   };
 
   const handleAddToQueue = () => {
-    if (!selectedColorCode || selectedFinishes.length === 0) return;
+    if (!selectedColorCode) return;
     
     const newLabel: QueuedLabel = {
       brand: selectedBrand,
@@ -534,10 +534,18 @@ export const LabelGenerator = () => {
       finishes: [...selectedFinishes],
       sizes: { ...selectedSizes },
       displayName: selectedColorCode,
-      quantity: Number(labelQuantity),
+      quantity: Number(labelQuantity) || 1,
     };
   
     setLabelQueue(prev => [...prev, newLabel]);
+    
+    // Reset brand which will trigger cascading resets of all other fields
+    setSelectedBrand('');
+    // The following will be handled by useEffect hooks and onChange handlers:
+    // - series
+    // - color
+    // - finishes
+    // - sizes
     setLabelQuantity('');
   };
 
@@ -707,14 +715,14 @@ export const LabelGenerator = () => {
 
           {/* Add to Queue Button */}
           <div>
-            <button
-              className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
-              onClick={handleAddToQueue}
-              disabled={!selectedColorCode || selectedFinishes.length === 0}
-            >
-              Add Label to Queue
-            </button>
-          </div>
+  <button
+    className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+    onClick={handleAddToQueue}
+    disabled={!selectedColorCode}
+  >
+    Add Label to Queue
+  </button>
+</div>
 
           {/* Queue Display */}
           {labelQueue.length > 0 && (
