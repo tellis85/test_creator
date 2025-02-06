@@ -53,7 +53,6 @@ interface LabelProps {
 interface SizeSelection {
   [key: string]: boolean;
 }
-
 export const LabelGenerator = () => {
   const [labelData, setLabelData] = useState<LabelItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -118,25 +117,46 @@ export const LabelGenerator = () => {
   useEffect(() => {
     setSelectedSizes({});
   }, [selectedSeries]);
-
   const loadImage = (url: string): Promise<string> => {
     return new Promise((resolve, reject) => {
+      // If the URL is already a data URL, return it directly
+      if (url.startsWith('data:')) {
+        resolve(url);
+        return;
+      }
+
       const img = new Image();
       img.crossOrigin = 'anonymous';
+      
+      // Add cache busting parameter to prevent caching issues
+      const cacheBustUrl = `${url}?t=${new Date().getTime()}`;
+      
       img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          reject(new Error('Failed to get canvas context'));
-          return;
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Failed to get canvas context'));
+            return;
+          }
+          ctx.drawImage(img, 0, 0);
+          const dataUrl = canvas.toDataURL('image/jpeg', 1.0);
+          resolve(dataUrl);
+        } catch (error) {
+          console.error('Error converting image to data URL:', error);
+          reject(error);
         }
-        ctx.drawImage(img, 0, 0);
-        resolve(canvas.toDataURL('image/jpeg'));
       };
-      img.onerror = () => reject(new Error(`Failed to load image: ${url}`));
-      img.src = url;
+      
+      img.onerror = (error) => {
+        console.error('Error loading image:', url, error);
+        // If image fails to load, return a placeholder or fallback
+        resolve('/api/placeholder/192/288');
+      };
+      
+      img.src = cacheBustUrl;
     });
   };
 
@@ -145,7 +165,6 @@ export const LabelGenerator = () => {
     const cleanName = templateName.trim();
     return `/templates/daltile/${cleanName.replace(/\.png$/, '.jpg')}`;
   };
-
   const brands = useMemo(() => [...new Set(labelData.map(item => item.Brand))], [labelData]);
   
   const series = useMemo(() => {
@@ -222,34 +241,33 @@ export const LabelGenerator = () => {
       return numA - numB;
     });
   }, [selectedColorCode, selectedFinishes, colorCodes]);
-
   const Label = ({ labelConfig = null, scale = 1 }: LabelProps) => {
     const selectedData = labelConfig ? 
-  labelData.find(item => 
-    item.Brand === labelConfig.brand &&
-    item.seriesname === labelConfig.series &&
-    item['Color Code + Color Name'] === labelConfig.colorCode
-  ) :
-  labelData.find(item => 
-    item.Brand === selectedBrand &&
-    item.seriesname === selectedSeries
-  );
-  
+      labelData.find(item => 
+        item.Brand === labelConfig.brand &&
+        item.seriesname === labelConfig.series &&
+        item['Color Code + Color Name'] === labelConfig.colorCode
+      ) :
+      labelData.find(item => 
+        item.Brand === selectedBrand &&
+        item.seriesname === selectedSeries
+      );
+    
     const templatePath = selectedData ? getTemplatePath(selectedData['Background Template']) : null;
     const sizes = labelConfig ? labelConfig.sizes : selectedSizes;
-  
+    
     const selectedSizesText = Object.entries(sizes)
       .filter(([_, isSelected]) => isSelected)
       .map(([size]) => size)
       .map(size => `<span style="white-space: nowrap">${size}</span>`)
       .join(', ');
-  
+    
     const displayColorCode = labelConfig ? labelConfig.colorCode : selectedColorCode;
     const displayFinishes = labelConfig ? labelConfig.finishes : selectedFinishes;
-  
+    
     const baseWidth = 2 * 96;
     const baseHeight = 3 * 96;
-  
+    
     return (
       <div 
         className="relative bg-white"
@@ -347,7 +365,6 @@ export const LabelGenerator = () => {
       </div>
     );
   };
-
   const PrintLayout = () => {
     const expandedLabels = labelQueue.flatMap(label => 
       Array(label.quantity).fill(label)
@@ -419,14 +436,30 @@ export const LabelGenerator = () => {
 
     return <div>{sheets}</div>;
   };
-
   const handleGeneratePDF = async (preview = false) => {
     try {
       setIsGenerating(true);
       setIsPrintLayoutVisible(true);
       
-      // Wait for the print layout to be rendered
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Wait longer for the print layout to be rendered and images to load
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Pre-load all images before starting PDF generation
+      const preloadImages = async () => {
+        const images = document.querySelectorAll('img');
+        const imageLoadPromises = Array.from(images).map(async (img: HTMLImageElement) => {
+          if (!img.src || img.src.startsWith('data:')) return;
+          try {
+            const dataUrl = await loadImage(img.src);
+            img.src = dataUrl;
+          } catch (error) {
+            console.error('Error preloading image:', error);
+          }
+        });
+        await Promise.all(imageLoadPromises);
+      };
+      
+      await preloadImages();
   
       const printLayout = document.getElementById('print-layout');
       if (!printLayout) {
@@ -466,30 +499,29 @@ export const LabelGenerator = () => {
   
           // Capture the sheet with adjusted settings
           const canvas = await html2canvas(sheet, {
-            scale: 4,
+            scale: 2, // Reduced scale to prevent memory issues
             useCORS: true,
-            logging: false,
+            logging: true, // Enable logging for debugging
+            allowTaint: true, // Allow cross-origin images
+            proxy: undefined, // Disable proxy to prevent network issues
             width: 11 * 96,
             height: 8.5 * 96,
             backgroundColor: '#ffffff',
-            // Add these new options
             windowWidth: 11 * 96,
             windowHeight: 8.5 * 96,
             scrollX: 0,
             scrollY: 0,
             x: 0,
             y: 0,
-            // Force a specific DPI
             foreignObjectRendering: false,
             imageTimeout: 0,
-            // Add custom HTML2Canvas options
             onclone: (clonedDoc) => {
               // Find all text containers in cloned document
               const textContainers = clonedDoc.getElementsByClassName('label-text-container');
               for (let container of Array.from(textContainers)) {
                 // Adjust the position for PDF output
                 const element = container as HTMLElement;
-                element.style.top = '206px'; // Adjust this value as needed
+                element.style.top = '206px';
                 element.style.transform = 'none';
                 element.style.webkitTransform = 'none';
                 element.style.position = 'absolute';
@@ -508,12 +540,34 @@ export const LabelGenerator = () => {
       }
   
       if (preview) {
-        const pdfBlob = pdf.output('blob');
-        const pdfUrl = URL.createObjectURL(pdfBlob);
-        window.open(pdfUrl, '_blank');
-        setTimeout(() => URL.revokeObjectURL(pdfUrl), 100);
+        // For preview, use blob URL with window.open
+        const pdfData = pdf.output('bloburi');
+        window.open(pdfData, '_blank');
       } else {
-        pdf.save('labels.pdf');
+        // For download, use arraybuffer and manual download
+        try {
+          const arrayBuffer = pdf.output('arraybuffer');
+          const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+          
+          // Create download link
+          const downloadLink = document.createElement('a');
+          downloadLink.href = window.URL.createObjectURL(blob);
+          downloadLink.download = 'labels.pdf';
+          
+          // Append to document, click, and cleanup
+          document.body.appendChild(downloadLink);
+          downloadLink.click();
+          
+          // Small delay before cleanup
+          setTimeout(() => {
+            document.body.removeChild(downloadLink);
+            window.URL.revokeObjectURL(downloadLink.href);
+          }, 100);
+          
+        } catch (error) {
+          console.error('Download failed:', error);
+          alert('Download failed. Try using print to PDF as a workaround.');
+        }
       }
     } catch (err) {
       console.error('Error generating PDF:', err);
@@ -523,7 +577,6 @@ export const LabelGenerator = () => {
       setIsPrintLayoutVisible(false);
     }
   };
-
   const handleAddToQueue = () => {
     if (!selectedColorCode) return;
     
@@ -541,11 +594,6 @@ export const LabelGenerator = () => {
     
     // Reset brand which will trigger cascading resets of all other fields
     setSelectedBrand('');
-    // The following will be handled by useEffect hooks and onChange handlers:
-    // - series
-    // - color
-    // - finishes
-    // - sizes
     setLabelQuantity('');
   };
 
@@ -629,7 +677,7 @@ export const LabelGenerator = () => {
             </select>
           </div>
 
-          {/* Finish Selection - Modified to checkboxes */}
+          {/* Finish Selection */}
           {finishesForColor.length > 0 && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Finishes</label>
@@ -715,14 +763,14 @@ export const LabelGenerator = () => {
 
           {/* Add to Queue Button */}
           <div>
-  <button
-    className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
-    onClick={handleAddToQueue}
-    disabled={!selectedColorCode}
-  >
-    Add Label to Queue
-  </button>
-</div>
+            <button
+              className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+              onClick={handleAddToQueue}
+              disabled={!selectedColorCode}
+            >
+              Add Label to Queue
+            </button>
+          </div>
 
           {/* Queue Display */}
           {labelQueue.length > 0 && (
@@ -784,16 +832,16 @@ export const LabelGenerator = () => {
 
       {/* Print Layout - Hidden but used for rendering */}
       <div 
-  id="print-layout" 
-  style={{ 
-    display: isPrintLayoutVisible ? 'block' : 'none',
-    position: 'fixed',
-    left: '-9999px',
-    top: '-9999px'
-  }}
->
-  <PrintLayout />
-</div>
+        id="print-layout" 
+        style={{ 
+          display: isPrintLayoutVisible ? 'block' : 'none',
+          position: 'fixed',
+          left: '-9999px',
+          top: '-9999px'
+        }}
+      >
+        <PrintLayout />
+      </div>
 
       {/* Preview/Print Button */}
       <div className="mt-8">
