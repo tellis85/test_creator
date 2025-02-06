@@ -610,7 +610,7 @@ export const LabelGenerator = () => {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-6 max-w-6xl mx-auto bg-white">
       {/* Main content grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* Left column - Selection controls */}
@@ -775,13 +775,13 @@ export const LabelGenerator = () => {
           {/* Queue Display */}
           {labelQueue.length > 0 && (
             <div className="mt-4 border rounded-lg p-4 bg-gray-50">
-              <h3 className="text-lg font-medium mb-2">
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
                 Queued Labels (Total: {labelQueue.reduce((sum, label) => sum + label.quantity, 0)})
               </h3>
               <div className="space-y-2">
                 {labelQueue.map((label, index) => (
                   <div key={index} className="flex justify-between items-center p-2 bg-white rounded shadow-sm">
-                    <span className="text-sm">
+                   <span className="text-sm text-gray-900">
                       {label.series} - {label.displayName} (×{label.quantity})
                     </span>
                     <button
@@ -803,19 +803,19 @@ export const LabelGenerator = () => {
             <span className="text-sm font-medium text-gray-700">Preview ({Math.round(previewScale * 100)}%)</span>
             <div className="flex gap-2">
               <button
-                className="px-2 py-1 text-sm border rounded hover:bg-gray-50"
+                className="px-2 py-1 text-sm border rounded bg-white hover:bg-gray-50 text-gray-900"
                 onClick={() => setPreviewScale(prev => Math.max(0.5, prev - 0.25))}
               >
                 −
               </button>
               <button
-                className="px-2 py-1 text-sm border rounded hover:bg-gray-50"
+                className="px-2 py-1 text-sm border rounded bg-white hover:bg-gray-50 text-gray-900"
                 onClick={() => setPreviewScale(1.75)}
               >
                 Reset
               </button>
               <button
-                className="px-2 py-1 text-sm border rounded hover:bg-gray-50"
+                className="px-2 py-1 text-sm border rounded bg-white hover:bg-gray-50 text-gray-900"
                 onClick={() => setPreviewScale(prev => Math.min(3, prev + 0.25))}
               >
                 +
