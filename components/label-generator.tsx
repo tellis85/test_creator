@@ -864,7 +864,7 @@ export const LabelGenerator = () => {
         </button>
       </div>
       <div className="mt-4 text-center">
-        <span style={{ fontSize: '30pt', fontWeight: 'bold', color: 'red' }}>
+        <span style={{ fontSize: '30pt', fontWeight: 'bold', color: 'green' }}>
           ***Use Avery Label Presta 94237***
         </span>
       </div>
