@@ -864,9 +864,23 @@ export const LabelGenerator = () => {
         </button>
       </div>
       <div className="mt-4 text-center">
-        <span style={{ fontSize: '30pt', fontWeight: 'bold', color: 'green' }}>
-          ***Use Avery Label Presta 94237***
-        </span>
+        <a 
+          href="https://www.avery.com/blank/labels/94237" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          style={{ 
+            fontSize: '20pt', 
+            fontWeight: 'bold', 
+            color: 'red', 
+            border: '4px solid black', 
+            padding: '10px', 
+            borderRadius: '5px', 
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)', 
+            display: 'inline-block' 
+          }}
+        >
+          Click to purchase Avery Label 94237
+        </a>
       </div>
     </div>
   );
